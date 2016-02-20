@@ -14,9 +14,20 @@ cropping params
 175, 475 bottom
 120 height
 
-parabolic params
-top center - 85
-green x,y = 70, 89
-red x,y = 110, 86
-yellow x,y = 150, 85
 
+parabolic params - line 1
+
+green = 84, 36
+red = 117, 33
+yellow = 150, 32
+blue = 183, 33
+orange = 216, 36
+
+-- Redone video --
+
+bottom line
+green = 58, 120
+red = 104, 115
+yellow = 150, 114
+blue = 196, 115
+orange = 142, 120
