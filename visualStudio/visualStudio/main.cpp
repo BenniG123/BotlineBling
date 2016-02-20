@@ -63,30 +63,32 @@ int main(int argc, char** argv) {
 	cv::VideoCapture cap;
 	cv::Mat frame;
 	cv::Mat dFrame;
-	
+
 	uchar colorCnt[5] = { 0 };
 	cv::Scalar colors[5] = { cv::Scalar(0, 255, 0), cv::Scalar(0, 0, 255), cv::Scalar(0, 255, 255), cv::Scalar(255, 0, 0), cv::Scalar(0, 128, 255) };
+
+	std::queue<int> noteQ[5];
 	
 	// Threshold of the grayscale input image
-	int THRESH = 120;
+	int THRESH = 168;
     int frameCounter = 0;
     Scheduler scheduler;
 
 	const int MAXUCHAR = 255;
 
 	// Region of interest where the notes are
-	/*const int ROIX = 350;
-	const int ROIY = 240;
+	const int ROIX = 20;
+	const int ROIY = 0;
 	const int ROIWIDTH = 600;
-	const int ROIHEIGHT = 480;*/
+	const int ROIHEIGHT = 480;
 
 	// Note distribution
-	const int TOPNOTEOFFSETX = 79;
-	const int TOPNOTEOFFSETY = 60;
-	const int TOPNOTESPACINGX = 35;
-	const int BOTNOTEOFFSETX = 59;
-	const int BOTNOTEOFFSETY = 114;
-	const int BOTNOTESPACINGX = 44;
+	const int TOPNOTEOFFSETX = 93;
+	const int TOPNOTEOFFSETY = 80;
+	const int TOPNOTESPACINGX = 28;
+	const int BOTNOTEOFFSETX = 76;
+	const int BOTNOTEOFFSETY = 134;
+	const int BOTNOTESPACINGX = 36;
 
 	const int CONSEC_HITS = 1;
 
@@ -109,21 +111,27 @@ int main(int argc, char** argv) {
 	}
 	
 	while (1) {
-        frameCounter++;
+		frameCounter++;
 		cap >> frame;
 		if (frame.empty()) {
 			break;
 		}
 		cv::cvtColor(frame, frame, CV_BGR2GRAY);
-		//frame = frame(cv::Rect(ROIX, ROIY, ROIWIDTH, ROIHEIGHT));
+		frame = frame(cv::Rect(ROIX, ROIY, ROIWIDTH, ROIHEIGHT));
 		cv::resize(frame, frame, cv::Size(frame.cols / 2, frame.rows / 2));
 		cv::Mat frame2;
 		frame.copyTo(frame2);
+
 		cv::threshold(frame, frame, THRESH, MAXUCHAR, cv::THRESH_BINARY);
 		cv::dilate(frame, dFrame, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
 
 		cv::cvtColor(dFrame, dFrame, CV_GRAY2BGR);
 		cv::cvtColor(frame2, frame2, CV_GRAY2BGR);
+
+		// Draw guides
+		cv::line(frame2, cv::Point(96, 35), cv::Point(20, 240), cv::Scalar(0, 0, 255), 1);
+		cv::line(frame2, cv::Point(200, 35), cv::Point(276, 240), cv::Scalar(0, 0, 255), 1);
+		cv::circle(frame2, cv::Point(147, 216), 14, cv::Scalar(0, 0, 255), 1);
 
 		for (int i = 0; i < 5; i++) {
 			cv::Mat tmp = dFrame(cv::Rect((TOPNOTEOFFSETX - 5) + TOPNOTESPACINGX * i, (TOPNOTEOFFSETY - 5) + (abs(2 - i) * abs(2 - i)), 10, 10));
@@ -133,7 +141,10 @@ int main(int argc, char** argv) {
 				colorCnt[i]++;
 
 				if (colorCnt[i] >= CONSEC_HITS) {
-                    // TODO - Store top frame number in a temp queue
+                    // Store top frame number in a queue
+					noteQ[i].push(frameCounter);
+
+					// Draw circles where we found stuff
 					cv::circle(frame2, cv::Point(TOPNOTEOFFSETX + TOPNOTESPACINGX * i, TOPNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 					cv::circle(dFrame, cv::Point(TOPNOTEOFFSETX + TOPNOTESPACINGX * i, TOPNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 				}
@@ -152,8 +163,13 @@ int main(int argc, char** argv) {
 
 				if (colorCnt[i] >= CONSEC_HITS) {
                     // TODO - Pop off of top queue and calculate frame difference for speed
-                    int speed = 5;
-                    scheduler.addEvent(NoteEvent(frameCounter + speed, i));
+					if (!noteQ[i].empty()) {
+						int speed = (frameCounter - noteQ[i].front()) / (BOTNOTEOFFSETY - TOPNOTEOFFSETY);
+						noteQ[i].pop();
+						std::cout << i << ": " << speed << std::endl;
+						scheduler.addEvent(NoteEvent(frameCounter + speed, i));
+					}
+
 					cv::circle(frame2, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 					cv::circle(dFrame, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 				}
@@ -166,7 +182,7 @@ int main(int argc, char** argv) {
 		cv::imshow("Window", frame2);
 		cv::imshow("Window2", dFrame);
 
-		char c = cv::waitKey(60);
+		char c = cv::waitKey(30);
 		if (c == 27)
 			break;
 	}
