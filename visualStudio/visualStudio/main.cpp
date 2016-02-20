@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
     int frameCounter = 0;
     Scheduler scheduler;
 	uchar toSend;
+	uchar prevSent;
 
 	const int MAXUCHAR = 255;
 	const int DIST_TO_FIRE = 36;
@@ -214,11 +215,12 @@ int main(int argc, char** argv) {
 		if (toSend != 0) {
 			std::cout << "0x" << std::hex << (int)toSend;
 			std::cout << "\n";
+		
+			DWORD bytesWritten;
+			while (!WriteFile(m_hCommPort, &toSend, 1, &bytesWritten, NULL));
+			toSend = 0;
+			while (!WriteFile(m_hCommPort, &toSend, 1, &bytesWritten, NULL));
 		}
-		DWORD bytesWritten;
-		uchar toReceive;
-		DWORD bytesRead;
-		while (!WriteFile(m_hCommPort, &toSend, 1, &bytesWritten, NULL));
 
 		char c = cv::waitKey(30);
 		if (c == 27)
