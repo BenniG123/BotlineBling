@@ -64,8 +64,10 @@ int main(int argc, char** argv) {
 	cv::Mat frame;
 	cv::Mat dFrame;
 
-	uchar colorCnt[5] = { 0 };
+	uchar colorCntTop[5] = { 0 };
+	uchar colorCntBot[5] = { 0 };
 	cv::Scalar colors[5] = { cv::Scalar(0, 255, 0), cv::Scalar(0, 0, 255), cv::Scalar(0, 255, 255), cv::Scalar(255, 0, 0), cv::Scalar(0, 128, 255) };
+	std::string colorNames[5] = { "Green", "Red", "Yellow", "Blue", "Orange" };
 
 	std::queue<int> noteQ[5];
 	
@@ -103,7 +105,7 @@ int main(int argc, char** argv) {
 	}
 	else {
 		cap.open(argv[1]);
-		//cap.set(CV_CAP_PROP_POS_FRAMES, 400);
+		cap.set(CV_CAP_PROP_POS_FRAMES, 60);
 	}
 	if (!cap.isOpened()) {
 		std::cout << "Couldn't open video file\n";
@@ -138,11 +140,14 @@ int main(int argc, char** argv) {
 			cv::rectangle(frame2, cv::Rect((TOPNOTEOFFSETX - 5) + TOPNOTESPACINGX * i, (TOPNOTEOFFSETY - 5) + (abs(2 - i) * abs(2 - i)), 10, 10), colors[i]);
 			cv::rectangle(dFrame, cv::Rect((TOPNOTEOFFSETX - 5) + TOPNOTESPACINGX * i, (TOPNOTEOFFSETY - 5) + (abs(2 - i) * abs(2 - i)), 10, 10), colors[i]);
 			if (tmp.at<cv::Vec3b>(4, 4) == cv::Vec3b::all(MAXUCHAR)) {
-				colorCnt[i]++;
+				colorCntTop[i]++;
 
-				if (colorCnt[i] >= CONSEC_HITS) {
+				if (colorCntTop[i] >= CONSEC_HITS) {
                     // Store top frame number in a queue
-					noteQ[i].push(frameCounter);
+					if (colorCntTop[i] == CONSEC_HITS) {
+						noteQ[i].push(frameCounter);
+						//std::cout << "Adding " << colorNames[i] << " to queue. Color count: " << (int) colorCntTop[i] << "\n";
+					}
 
 					// Draw circles where we found stuff
 					cv::circle(frame2, cv::Point(TOPNOTEOFFSETX + TOPNOTESPACINGX * i, TOPNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
@@ -150,7 +155,7 @@ int main(int argc, char** argv) {
 				}
 			}
 			else {
-				colorCnt[i] = 0;
+				colorCntTop[i] = 0;
 			}
 		}
 
@@ -159,14 +164,15 @@ int main(int argc, char** argv) {
 			cv::rectangle(frame2, cv::Rect((BOTNOTEOFFSETX - 5) + BOTNOTESPACINGX * i, (BOTNOTEOFFSETY - 5) + (abs(2 - i) * abs(2 - i)), 10, 10), colors[i]);
 			cv::rectangle(dFrame, cv::Rect((BOTNOTEOFFSETX - 5) + BOTNOTESPACINGX * i, (BOTNOTEOFFSETY - 5) + (abs(2 - i) * abs(2 - i)), 10, 10), colors[i]);
 			if (tmp.at<cv::Vec3b>(4, 4) == cv::Vec3b::all(MAXUCHAR)) {
-				colorCnt[i]++;
+				colorCntBot[i]++;
 
-				if (colorCnt[i] >= CONSEC_HITS) {
+				if (colorCntBot[i] >= CONSEC_HITS) {
                     // TODO - Pop off of top queue and calculate frame difference for speed
-					if (!noteQ[i].empty()) {
-						int speed = (frameCounter - noteQ[i].front()) / (BOTNOTEOFFSETY - TOPNOTEOFFSETY);
+					if (!noteQ[i].empty() && colorCntBot[i] == CONSEC_HITS) {
+						float speed = ((float)(BOTNOTEOFFSETY - TOPNOTEOFFSETY) / (frameCounter - noteQ[i].front()));
 						noteQ[i].pop();
-						std::cout << i << ": " << speed << std::endl;
+						//std::cout << "Popping " << colorNames[i] << " from queue.\n";
+						std::cout << colorNames[i] << ": " << speed << " pixels / frame" << std::endl;
 						scheduler.addEvent(NoteEvent(frameCounter + speed, i));
 					}
 
@@ -175,7 +181,7 @@ int main(int argc, char** argv) {
 				}
 			}
 			else {
-				colorCnt[i] = 0;
+				colorCntBot[i] = 0;
 			}
 		}
 
