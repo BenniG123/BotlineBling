@@ -1,0 +1,22 @@
+
+Lines 
+pt1 - 225x205
+pt2 - 425X205
+
+At 205 pixels deep
+green - 247
+red - 287
+yellow - 326
+blue - 367
+orange - 402
+
+cropping params
+175, 475 bottom
+120 height
+
+parabolic params
+top center - 85
+green x,y = 70, 89
+red x,y = 110, 86
+yellow x,y = 150, 85
+
