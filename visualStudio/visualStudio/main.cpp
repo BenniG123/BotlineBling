@@ -35,27 +35,28 @@ struct NoteEvent {
 class Scheduler {
 private:
 	std::queue<NoteEvent> q;
-	const int LOOKAHEAD = 3;
+	const int LOOKAHEAD = 2;
 
 public:
 	void addEvent(NoteEvent e) {
 		q.push(e);
 	}
 
-	std::vector<NoteEvent> nextNotes(int curFrame) {
+	uchar nextNotes(int curFrame) {
 		// Find events that need to happen next
-		std::vector<NoteEvent> ret;
-		for (int i = 0; i < q.size(); i++) {
-			// If q.front is within the next 
-			if (q.front().frame <= curFrame + LOOKAHEAD) {
-				// Put in vector
-				ret.push_back(q.front());
+		uchar ret = 0;
+		
+		if (!q.empty() && q.front().frame <= curFrame) {
+			while (!q.empty() && q.front().frame <= curFrame + LOOKAHEAD) {
+				// Construct uchar - Say which buttons to push in
+				ret |= 1 << q.front().index;
+				// Strum - Bit 5
+				ret |= 0x20;
 				q.pop();
 			}
-			else {
-				break;
-			}
 		}
+
+		return ret;
 	}
 };
 
@@ -75,8 +76,10 @@ int main(int argc, char** argv) {
 	int THRESH = 168;
     int frameCounter = 0;
     Scheduler scheduler;
+	uchar toSend;
 
 	const int MAXUCHAR = 255;
+	const int DIST_TO_FIRE = 36;
 
 	// Region of interest where the notes are
 	const int ROIX = 20;
@@ -105,7 +108,7 @@ int main(int argc, char** argv) {
 	}
 	else {
 		cap.open(argv[1]);
-		cap.set(CV_CAP_PROP_POS_FRAMES, 60);
+		cap.set(CV_CAP_PROP_POS_FRAMES, 90);
 	}
 	if (!cap.isOpened()) {
 		std::cout << "Couldn't open video file\n";
@@ -146,7 +149,6 @@ int main(int argc, char** argv) {
                     // Store top frame number in a queue
 					if (colorCntTop[i] == CONSEC_HITS) {
 						noteQ[i].push(frameCounter);
-						//std::cout << "Adding " << colorNames[i] << " to queue. Color count: " << (int) colorCntTop[i] << "\n";
 					}
 
 					// Draw circles where we found stuff
@@ -167,13 +169,14 @@ int main(int argc, char** argv) {
 				colorCntBot[i]++;
 
 				if (colorCntBot[i] >= CONSEC_HITS) {
-                    // TODO - Pop off of top queue and calculate frame difference for speed
+                    // Pop off of top queue and calculate frame difference for speed
 					if (!noteQ[i].empty() && colorCntBot[i] == CONSEC_HITS) {
+						// Calculate pixels/frame
 						float speed = ((float)(BOTNOTEOFFSETY - TOPNOTEOFFSETY) / (frameCounter - noteQ[i].front()));
 						noteQ[i].pop();
-						//std::cout << "Popping " << colorNames[i] << " from queue.\n";
-						std::cout << colorNames[i] << ": " << speed << " pixels / frame" << std::endl;
-						scheduler.addEvent(NoteEvent(frameCounter + speed, i));
+
+						// Calculate frames to note impact
+						scheduler.addEvent(NoteEvent(i, frameCounter + (int) (DIST_TO_FIRE / speed)));
 					}
 
 					cv::circle(frame2, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
@@ -187,6 +190,14 @@ int main(int argc, char** argv) {
 
 		cv::imshow("Window", frame2);
 		cv::imshow("Window2", dFrame);
+
+		toSend = scheduler.nextNotes(frameCounter);
+
+		// Send toSend to Arduino
+		if (toSend != 0) {
+			std::cout << "0x" << std::hex << (int)toSend;
+			std::cout << "\n";
+		}
 
 		char c = cv::waitKey(30);
 		if (c == 27)
