@@ -69,6 +69,8 @@ int main(int argc, char** argv) {
 	
 	// Threshold of the grayscale input image
 	int THRESH = 120;
+    int frameCounter = 0;
+    Scheduler scheduler;
 
 	const int MAXUCHAR = 255;
 
@@ -107,6 +109,7 @@ int main(int argc, char** argv) {
 	}
 	
 	while (1) {
+        frameCounter++;
 		cap >> frame;
 		if (frame.empty()) {
 			break;
@@ -130,6 +133,7 @@ int main(int argc, char** argv) {
 				colorCnt[i]++;
 
 				if (colorCnt[i] >= CONSEC_HITS) {
+                    // TODO - Store top frame number in a temp queue
 					cv::circle(frame2, cv::Point(TOPNOTEOFFSETX + TOPNOTESPACINGX * i, TOPNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 					cv::circle(dFrame, cv::Point(TOPNOTEOFFSETX + TOPNOTESPACINGX * i, TOPNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 				}
@@ -147,6 +151,9 @@ int main(int argc, char** argv) {
 				colorCnt[i]++;
 
 				if (colorCnt[i] >= CONSEC_HITS) {
+                    // TODO - Pop off of top queue and calculate frame difference for speed
+                    int speed = 5;
+                    scheduler.addEvent(NoteEvent(frameCounter + speed, i));
 					cv::circle(frame2, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 					cv::circle(dFrame, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 				}
