@@ -21,6 +21,7 @@ Test with solo sections (blue bg)
 #include <cstdlib>
 #include <sstream>
 #include <queue>
+#include <Windows.h>
 
 struct NoteEvent {
 	int index;
@@ -73,6 +74,8 @@ int main(int argc, char** argv) {
 	std::string colorNames[5] = { "Green", "Red", "Yellow", "Blue", "Orange" };
 
 	std::queue<int> noteQ[5];
+
+	HANDLE m_hCommPort = ::CreateFile("COM3", GENERIC_WRITE | GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
 	
 	// Threshold of the grayscale input image
 	int THRESH = 168;
@@ -212,6 +215,10 @@ int main(int argc, char** argv) {
 			std::cout << "0x" << std::hex << (int)toSend;
 			std::cout << "\n";
 		}
+		DWORD bytesWritten;
+		uchar toReceive;
+		DWORD bytesRead;
+		while (!WriteFile(m_hCommPort, &toSend, 1, &bytesWritten, NULL));
 
 		char c = cv::waitKey(30);
 		if (c == 27)
