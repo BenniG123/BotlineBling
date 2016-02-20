@@ -36,7 +36,7 @@ class Scheduler {
 private:
 	std::queue<NoteEvent> q;
 	const int LOOKAHEAD = 2;
-
+	
 public:
 	void addEvent(NoteEvent e) {
 		q.push(e);
@@ -64,6 +64,8 @@ int main(int argc, char** argv) {
 	cv::VideoCapture cap;
 	cv::Mat frame;
 	cv::Mat dFrame;
+	float avgSpeed = 0;
+	int noteCounter = 0;
 
 	uchar colorCntTop[5] = { 0 };
 	uchar colorCntBot[5] = { 0 };
@@ -108,7 +110,7 @@ int main(int argc, char** argv) {
 	}
 	else {
 		cap.open(argv[1]);
-		cap.set(CV_CAP_PROP_POS_FRAMES, 90);
+		cap.set(CV_CAP_PROP_POS_MSEC, 3000);
 	}
 	if (!cap.isOpened()) {
 		std::cout << "Couldn't open video file\n";
@@ -169,11 +171,16 @@ int main(int argc, char** argv) {
 				colorCntBot[i]++;
 
 				if (colorCntBot[i] >= CONSEC_HITS) {
-                    // Pop off of top queue and calculate frame difference for speed
+					// Pop off of top queue and calculate frame difference for speed
 					if (!noteQ[i].empty() && colorCntBot[i] == CONSEC_HITS) {
 						// Calculate pixels/frame
 						float speed = ((float)(BOTNOTEOFFSETY - TOPNOTEOFFSETY) / (frameCounter - noteQ[i].front()));
 						noteQ[i].pop();
+
+						if (noteCounter <= 20) {
+							avgSpeed = (avgSpeed * noteCounter + speed) / (noteCounter + 1);
+							noteCounter++;
+						}
 
 						// Calculate frames to note impact
 						scheduler.addEvent(NoteEvent(i, frameCounter + (int) (DIST_TO_FIRE / speed)));
@@ -182,6 +189,11 @@ int main(int argc, char** argv) {
 					cv::circle(frame2, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 					cv::circle(dFrame, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 				}
+			}
+			else if (!noteQ[i].empty() && noteCounter >= 20 && noteQ[i].front() < (frameCounter - DIST_TO_FIRE * 2 / avgSpeed)) {
+				// Check to make sure we don't have phantom notes in the queue
+				noteQ[i].pop();
+				std::cout << "Popped missed note from queue\n";
 			}
 			else {
 				colorCntBot[i] = 0;
@@ -192,6 +204,8 @@ int main(int argc, char** argv) {
 		cv::imshow("Window2", dFrame);
 
 		toSend = scheduler.nextNotes(frameCounter);
+
+		//std::cout << noteQ[0].size() << " | " << noteQ[1].size() << " | " << noteQ[2].size() << " | " << noteQ[3].size() << " | " << noteQ[4].size() << "\r";
 
 		// Send toSend to Arduino
 		if (toSend != 0) {
