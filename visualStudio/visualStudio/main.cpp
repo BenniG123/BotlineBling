@@ -1,15 +1,7 @@
 /*
-Primary
-Verify that the scheduler works
-Write the velocity/prediction code
-Write the serial/message code
-
 Secondary
-Make sure everything works at 640 better
 Sustained notes
 Monitor star power
-Test with solo sections (blue bg)
-
 */
 
 #include <opencv2/core.hpp>
@@ -36,6 +28,7 @@ struct NoteEvent {
 class Scheduler {
 private:
 	std::queue<NoteEvent> q;
+	std::queue<int> strumQ;
 	const int LOOKAHEAD = 2;
 	
 public:
@@ -52,12 +45,21 @@ public:
 				// Construct uchar - Say which buttons to push in
 				ret |= 1 << q.front().index;
 				// Strum - Bit 5
-				ret |= 0x20;
+				strumQ.push(q.front().frame + 3);
 				q.pop();
 			}
 		}
 
+		if (!strumQ.empty() && strumQ.front() <= curFrame) {
+			ret |= 0x20;
+			strumQ.pop();
+		}
+
 		return ret;
+	}
+
+	bool isEmpty() {
+		return q.size() == 0;
 	}
 };
 
@@ -65,6 +67,7 @@ int main(int argc, char** argv) {
 	cv::VideoCapture cap;
 	cv::Mat frame;
 	cv::Mat dFrame;
+	cv::Mat starPowerArea;
 	float avgSpeed = 0;
 	int noteCounter = 0;
 
@@ -76,16 +79,18 @@ int main(int argc, char** argv) {
 	std::queue<int> noteQ[5];
 
 	HANDLE m_hCommPort = ::CreateFile("COM3", GENERIC_WRITE | GENERIC_WRITE, 0, 0, OPEN_EXISTING, 0, 0);
-	
+	FlushFileBuffers(m_hCommPort);
+
 	// Threshold of the grayscale input image
 	int THRESH = 168;
     int frameCounter = 0;
     Scheduler scheduler;
 	uchar toSend;
-	uchar prevSent;
+	bool zeroAlreadySent = false;
+	int lastNoteFrame = 0;
 
 	const int MAXUCHAR = 255;
-	const int DIST_TO_FIRE = 36;
+	const int DIST_TO_FIRE = 6;
 
 	// Region of interest where the notes are
 	const int ROIX = 20;
@@ -101,7 +106,7 @@ int main(int argc, char** argv) {
 	const int BOTNOTEOFFSETY = 134;
 	const int BOTNOTESPACINGX = 36;
 
-	const int CONSEC_HITS = 1;
+	const int CONSEC_HITS = 3;
 
 	cv::namedWindow("Window", cv::WINDOW_AUTOSIZE);
 	cv::namedWindow("Window2", cv::WINDOW_AUTOSIZE);
@@ -114,7 +119,7 @@ int main(int argc, char** argv) {
 	}
 	else {
 		cap.open(argv[1]);
-		cap.set(CV_CAP_PROP_POS_MSEC, 3000);
+		cap.set(CV_CAP_PROP_POS_MSEC, 40000);
 	}
 	if (!cap.isOpened()) {
 		std::cout << "Couldn't open video file\n";
@@ -135,6 +140,7 @@ int main(int argc, char** argv) {
 
 		cv::threshold(frame, frame, THRESH, MAXUCHAR, cv::THRESH_BINARY);
 		cv::dilate(frame, dFrame, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
+		starPowerArea = dFrame(cv::Rect(204, 204, 10, 10));
 
 		cv::cvtColor(dFrame, dFrame, CV_GRAY2BGR);
 		cv::cvtColor(frame2, frame2, CV_GRAY2BGR);
@@ -194,11 +200,12 @@ int main(int argc, char** argv) {
 					cv::circle(dFrame, cv::Point(BOTNOTEOFFSETX + BOTNOTESPACINGX * i, BOTNOTEOFFSETY + (abs(2 - i) * abs(2 - i))), 10, colors[i], 3);
 				}
 			}
-			else if (!noteQ[i].empty() && noteCounter >= 20 && noteQ[i].front() < (frameCounter - DIST_TO_FIRE * 2 / avgSpeed)) {
+			/* else if (!noteQ[i].empty() && noteCounter >= 20 && noteQ[i].front() < (frameCounter - DIST_TO_FIRE * 2 / avgSpeed)) {
+				std::cout << "Expected Arrival: " << std::dec << noteQ[i].front() << " Avg. Speed: " << avgSpeed << "\n";
 				// Check to make sure we don't have phantom notes in the queue
 				noteQ[i].pop();
 				std::cout << "Popped missed note from queue\n";
-			}
+			} */
 			else {
 				colorCntBot[i] = 0;
 			}
@@ -208,18 +215,31 @@ int main(int argc, char** argv) {
 		cv::imshow("Window2", dFrame);
 
 		toSend = scheduler.nextNotes(frameCounter);
-
+		
 		//std::cout << noteQ[0].size() << " | " << noteQ[1].size() << " | " << noteQ[2].size() << " | " << noteQ[3].size() << " | " << noteQ[4].size() << "\r";
 
 		// Send toSend to Arduino
 		if (toSend != 0) {
+			zeroAlreadySent = false;
+			lastNoteFrame = frameCounter;
+
+			// If we can use star power, do it (this technically will try to press it many times, but it should turn off once it leaves that ROI 
+			if (cv::countNonZero(starPowerArea) > 80) {
+				toSend |= 0x40;
+			}
+
 			std::cout << "0x" << std::hex << (int)toSend;
 			std::cout << "\n";
 		
 			DWORD bytesWritten;
 			while (!WriteFile(m_hCommPort, &toSend, 1, &bytesWritten, NULL));
-			toSend = 0;
-			while (!WriteFile(m_hCommPort, &toSend, 1, &bytesWritten, NULL));
+			//while (!WriteFile(m_hCommPort, &toSend2, 1, &bytesWritten, NULL));
+		}
+		else if (scheduler.isEmpty() && !zeroAlreadySent && frameCounter > lastNoteFrame + 30) {
+			zeroAlreadySent = true;
+			DWORD bytesWritten;
+			uchar toSend2 = 0;
+			while (!WriteFile(m_hCommPort, &toSend2, 1, &bytesWritten, NULL));
 		}
 
 		char c = cv::waitKey(30);
